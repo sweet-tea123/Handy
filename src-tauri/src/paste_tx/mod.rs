@@ -41,11 +41,15 @@ use std::time::{Duration, Instant};
 mod macos;
 #[cfg(target_os = "windows")]
 mod windows;
+#[cfg(target_os = "linux")]
+mod linux;
 
 #[cfg(target_os = "macos")]
 use macos as platform;
 #[cfg(target_os = "windows")]
 use windows as platform;
+#[cfg(target_os = "linux")]
+use linux as platform;
 
 /// How long after the *last* observed read the transcript stays on the
 /// clipboard before restoring. Covers applications that read the clipboard
