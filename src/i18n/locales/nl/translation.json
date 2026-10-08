@@ -398,6 +398,15 @@
       "fillerWordRemoval": {
         "title": "Opvulwoorden verwijderen",
         "description": "Verwijdert veelvoorkomende aarzelwoorden uit transcripties. Schakel dit uit om ze te behouden."
+      },
+      "chineseScript": {
+        "title": "Chinees schrift",
+        "description": "Schrijft Mandarijn- en Kantonese transcripties in vereenvoudigde of traditionele karakters. Andere talen blijven ongewijzigd.",
+        "options": {
+          "asTranscribed": "Zoals getranscribeerd",
+          "simplified": "Vereenvoudigd",
+          "traditional": "Traditioneel"
+        }
       }
     },
     "postProcessing": {
@@ -702,7 +711,8 @@
   },
   "overlay": {
     "transcribing": "Transcriberen...",
-    "processing": "Verwerken..."
+    "processing": "Verwerken...",
+    "loadingModel": "Model laden..."
   },
   "secureInput": {
     "blockedWithCulprit_one": "{{name}} blokkeert mogelijk 1 sneltoets",
