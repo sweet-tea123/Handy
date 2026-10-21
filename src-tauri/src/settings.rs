@@ -229,6 +229,7 @@ pub enum RecordingRetentionPeriod {
 pub enum KeyboardImplementation {
     Tauri,
     HandyKeys,
+    WaylandNative, // Added for XDG Portal support
 }
 
 impl Default for KeyboardImplementation {
@@ -320,6 +321,7 @@ pub enum TypingTool {
     Dotool,
     Ydotool,
     Xdotool,
+    WaylandNative, // Added for native libei injection (Future Phase)
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type, Default)]
