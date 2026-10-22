@@ -13,6 +13,9 @@ mod handler;
 pub mod handy_keys;
 pub mod tauri_impl;
 
+#[cfg(target_os = "linux")]
+pub mod wayland_impl; // Added
+
 use log::{debug, error, info, warn};
 use serde::Serialize;
 use specta::Type;
@@ -52,6 +55,19 @@ pub fn init_shortcuts(app: &AppHandle) {
 
                 tauri_impl::init_shortcuts(app);
             }
+        }
+        #[cfg(target_os = "linux")]
+        KeyboardImplementation::WaylandNative => {
+            wayland_impl::init_shortcuts(app);
+            // Note: Signal listeners are spawned automatically inside wayland_impl::run_portal
+        }
+        #[cfg(not(target_os = "linux"))]
+        KeyboardImplementation::WaylandNative => {
+            warn!("Wayland Native shortcuts requested on non-Linux OS. Falling back to Tauri.");
+            let mut settings = settings::get_settings(app);
+            settings.keyboard_implementation = KeyboardImplementation::Tauri;
+            settings::write_settings(app, settings);
+            tauri_impl::init_shortcuts(app);
         }
     }
 }
@@ -135,6 +151,10 @@ pub fn register_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<()
     match settings.keyboard_implementation {
         KeyboardImplementation::Tauri => tauri_impl::register_shortcut(app, binding),
         KeyboardImplementation::HandyKeys => handy_keys::register_shortcut(app, binding),
+        #[cfg(target_os = "linux")]
+        KeyboardImplementation::WaylandNative => wayland_impl::register_shortcut(app, binding),
+        #[cfg(not(target_os = "linux"))]
+        KeyboardImplementation::WaylandNative => Err("Wayland Native shortcuts are only supported on Linux".into()),
     }
 }
 
@@ -144,6 +164,10 @@ pub fn unregister_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<
     match settings.keyboard_implementation {
         KeyboardImplementation::Tauri => tauri_impl::unregister_shortcut(app, binding),
         KeyboardImplementation::HandyKeys => handy_keys::unregister_shortcut(app, binding),
+        #[cfg(target_os = "linux")]
+        KeyboardImplementation::WaylandNative => wayland_impl::unregister_shortcut(app, binding),
+        #[cfg(not(target_os = "linux"))]
+        KeyboardImplementation::WaylandNative => Err("Wayland Native shortcuts are only supported on Linux".into()),
     }
 }
 
@@ -207,6 +231,14 @@ pub fn change_binding(
             settings.bindings.insert(id.clone(), b.clone());
             settings::write_settings(&app, settings);
             crate::secure_input::reconcile_fallback(&app);
+            
+            // --- CRITICAL WAYLAND PATCH FOR CANCEL KEY ---
+            #[cfg(target_os = "linux")]
+            if get_settings(&app).keyboard_implementation == KeyboardImplementation::WaylandNative {
+                let _ = wayland_impl::rebuild_session();
+            }
+            // ---------------------------------------------
+
             return Ok(BindingResponse {
                 success: true,
                 binding: Some(b.clone()),
@@ -247,10 +279,15 @@ pub fn change_binding(
 
     // Update the binding in the settings
     settings.bindings.insert(id, updated_binding.clone());
-
-    // Save the settings and synchronize any active Secure Input shadows.
     settings::write_settings(&app, settings);
     crate::secure_input::reconcile_fallback(&app);
+
+    // --- CRITICAL WAYLAND PATCH FOR ALL OTHER KEYS ---
+    #[cfg(target_os = "linux")]
+    if get_settings(&app).keyboard_implementation == KeyboardImplementation::WaylandNative {
+        let _ = wayland_impl::rebuild_session();
+    }
+    // -------------------------------------------------
 
     // Return the updated binding
     Ok(BindingResponse {
@@ -424,6 +461,7 @@ pub fn get_keyboard_implementation(app: AppHandle) -> String {
     match settings.keyboard_implementation {
         KeyboardImplementation::Tauri => "tauri".to_string(),
         KeyboardImplementation::HandyKeys => "handy_keys".to_string(),
+        KeyboardImplementation::WaylandNative => "wayland_native".to_string(),
     }
 }
 
@@ -439,6 +477,10 @@ fn validate_shortcut_for_implementation(
     match implementation {
         KeyboardImplementation::Tauri => tauri_impl::validate_shortcut(raw),
         KeyboardImplementation::HandyKeys => handy_keys::validate_shortcut(raw),
+        #[cfg(target_os = "linux")]
+        KeyboardImplementation::WaylandNative => wayland_impl::validate_shortcut(raw),
+        #[cfg(not(target_os = "linux"))]
+        KeyboardImplementation::WaylandNative => Err("Wayland Native shortcuts are only supported on Linux".into()),
     }
 }
 
@@ -447,6 +489,14 @@ fn parse_keyboard_implementation(s: &str) -> KeyboardImplementation {
     match s {
         "tauri" => KeyboardImplementation::Tauri,
         "handy_keys" => KeyboardImplementation::HandyKeys,
+        "wayland_native" => {
+            if cfg!(target_os = "linux") {
+                KeyboardImplementation::WaylandNative
+            } else {
+                warn!("Wayland native shortcuts are unsupported on this OS; defaulting to tauri");
+                KeyboardImplementation::Tauri
+            }
+        }
         other => {
             warn!(
                 "Invalid keyboard implementation '{}', defaulting to tauri",
@@ -470,6 +520,10 @@ fn unregister_all_shortcuts(app: &AppHandle, implementation: KeyboardImplementat
         let result = match implementation {
             KeyboardImplementation::Tauri => tauri_impl::unregister_shortcut(app, binding),
             KeyboardImplementation::HandyKeys => handy_keys::unregister_shortcut(app, binding),
+            #[cfg(target_os = "linux")]
+            KeyboardImplementation::WaylandNative => wayland_impl::unregister_shortcut(app, binding),
+            #[cfg(not(target_os = "linux"))]
+            KeyboardImplementation::WaylandNative => Err("Wayland Native shortcuts are only supported on Linux".into()),
         };
 
         if let Err(e) = result {
@@ -528,6 +582,10 @@ fn register_all_shortcuts_for_implementation(
         let result = match implementation {
             KeyboardImplementation::Tauri => tauri_impl::register_shortcut(app, binding),
             KeyboardImplementation::HandyKeys => handy_keys::register_shortcut(app, binding),
+            #[cfg(target_os = "linux")]
+            KeyboardImplementation::WaylandNative => wayland_impl::register_shortcut(app, binding),
+            #[cfg(not(target_os = "linux"))]
+            KeyboardImplementation::WaylandNative => Err("Wayland Native shortcuts are only supported on Linux".into()),
         };
 
         if let Err(e) = result {
@@ -979,6 +1037,7 @@ pub fn change_typing_tool_setting(app: AppHandle, tool: String) -> Result<(), St
         "dotool" => TypingTool::Dotool,
         "ydotool" => TypingTool::Ydotool,
         "xdotool" => TypingTool::Xdotool,
+        "wayland_native" => TypingTool::WaylandNative,
         other => {
             warn!("Invalid typing tool '{}', defaulting to auto", other);
             TypingTool::Auto
